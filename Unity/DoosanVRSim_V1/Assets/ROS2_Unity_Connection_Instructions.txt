@@ -1,0 +1,106 @@
+## ROS2–Unity Connection Startup Steps (Updated for working /joint_states pipeline)
+
+## 1. Navigate to your ROS2 workspace
+cd ~/ros2_ws
+
+## 2. Source the ROS2 environment
+source install/setup.bash
+Note: If your system already auto-sources /opt/ros/foxy/setup.bash in ~/.bashrc, this step may be enough. 
+Otherwise, manually source it when opening a new terminal.
+
+## 3. Launch the ROS–TCP Endpoint node
+ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.1 -p ROS_TCP_PORT:=10000
+- Starts the TCP server that Unity connects to.
+- Keep this terminal open while Unity is running.
+
+## 4. Open a second terminal for ROS2 monitoring
+cd ~/ros2_ws
+source install/setup.bash
+Useful monitoring commands:
+    ros2 topic list                         # Show all active topics
+    ros2 topic info /joint_states           # Get message type, publishers, and subscribers
+    ros2 topic echo /joint_states --once    # Inspect one message from Unity
+    ros2 topic hz /joint_states             # Check publish frequency
+
+## 5. Run the Unity Project
+- Open Unity and load your XR–HRI project.
+- Press Play to begin simulation.
+- In ROSConnection settings, ensure IP and port match (127.0.0.1:10000).
+- Confirm in the ROS terminal that /joint_states appears with Unity as a publisher.
+
+## Unity Publisher Setup (final working version)
+- Script: PublishJointStatesStd (publishes sensor_msgs/JointState to /joint_states).
+- Joint Articulations: Filled with the 6 ArticulationBody components:
+    1. shoulder_link
+    2. elbow_link
+    3. wrist_pitch_link
+    4. wrist_roll_link
+    5. wrist_yaw_link
+    6. end_effector_link
+- Joint Names: Match your URDF exactly:
+    a0509_joint_1
+    a0509_joint_2
+    a0509_joint_3
+    a0509_joint_4
+    a0509_joint_5
+    a0509_joint_6
+- Publish Period Sec: 0.1 (≈10 Hz, adjustable).
+
+## Expected Topics When Unity Is Running
+- /joint_states – Main topic sending joint angles from Unity to ROS2.
+- /chatter – Default ROS test topic (optional).
+- /tf – Coordinate frame transformations.
+- /parameter_events, /rosout – System-level diagnostics.
+
+## Notes & Reminders
+- All references to my_custom_msgs and /joint_states_unity were removed.
+- Publishing now uses standard ROS2 sensor_msgs/JointState for compatibility with robot_state_publisher, RViz, and MoveIt.
+- Ensure jointNames match the URDF exactly; mismatches will cause RViz to ignore motion.
+- If position is always [], check that Joint Articulations in Unity are linked and have active DoF.
+- Firewalls/antivirus can block port 10000 — disable or allow if Unity fails to connect.
+- Use ros2 topic hz /joint_states to verify publish rate; adjust in Unity script as needed.
+
+
+## Terminal 3 – Running `robot_state_publisher` with the URDF
+
+Purpose: Publishes the TF tree from the URDF so RViz knows how each link connects.  
+
+Commands:
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+ros2 run robot_state_publisher robot_state_publisher \
+  --ros-args -p robot_description:="$(< "/mnt/c/Users/ilach/Desktop/Research Project/Unity/DoosanVRSim_V1/Assets/DoosanRobot/a0509.blue.urdf")"
+
+# Terminal 4 – Launching and Setting Up RViz
+Terminal 4 – Launching and Setting Up RViz
+Steps inside RViz:
+
+Set Fixed Frame to base_link (matches URDF root link).
+
+Add → RobotModel and set Description Topic to /robot_description.
+
+(Optional) Add TF display to see all link transforms.
+
+Press Play in Unity and check that the robot in RViz moves when joints change.
+
+## RViz Bring‑Up (Visualize Unity → ROS2 Joint States)
+
+### What RViz is
+RViz is ROS’s 3D visualizer. It renders your robot from the URDF (via `/robot_description`) and poses each link using TF transforms produced by `robot_state_publisher` from `/joint_states`. In short: if it moves correctly in RViz, your URDF + joint names + streaming are aligned.
+
+### Why we use RViz right now
+- **Ground‑truth check**: Confirms `/joint_states` from Unity are well‑formed and match URDF joint names.
+- **TF sanity**: Shows missing transforms (“No transform from …”) immediately.
+- **Pre‑MoveIt/Hardware gate**: Validates the whole description/TF pipeline before adding planners or sending commands to a real arm.
+
+---
+
+## Steps to See the Doosan in RViz
+
+1) **Run `robot_state_publisher` with our URDF**  
+   *(Use your actual path; quotes handle spaces.)*
+   ```bash
+   source ~/ros2_ws/install/setup.bash
+   ros2 run robot_state_publisher robot_state_publisher \
+     --ros-args -p robot_description:="$(< "/mnt/c/Users/ilach/Desktop/Research Project/Unity/DoosanVRSim_V1/Assets/DoosanRobot/a0509.blue.urdf")"
